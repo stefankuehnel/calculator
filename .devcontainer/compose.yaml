@@ -1,0 +1,85 @@
+services:
+  ##############################################################################
+  # DEVELOPMENT CONTAINER SERVICE                                              #
+  ##############################################################################
+  devcontainer:
+    # --------------------------------------------------------------------------
+    # IMAGE
+    # --------------------------------------------------------------------------
+    # Specifies the container image and exact digest used for the
+    # development environment.
+    image: "mcr.microsoft.com/devcontainers/base@sha256:55126de3b3e113096201055951b4cb717900bafb379c59dcbada65c49cd7ce22" # jammy
+
+    # --------------------------------------------------------------------------
+    # TTY
+    # --------------------------------------------------------------------------
+    # When set to true, this directive allocates a pseudo-TTY. This is
+    # required for processes that remain active and allow for interactive
+    # shell sessions.
+    tty: true
+
+    # --------------------------------------------------------------------------
+    # VOLUMES
+    # --------------------------------------------------------------------------
+    # Defines the mount points between the host system and the container.
+    volumes:
+      - ..:/workspace
+
+    # --------------------------------------------------------------------------
+    # ENVIRONMENT VARIABLES
+    # --------------------------------------------------------------------------
+    # Sets environment variables within the container. These variables are
+    # used to configure the development environment.
+    environment:
+      DOCKER_HOST: "tcp://docker-in-docker:2375"
+
+  ##############################################################################
+  # DOCKER-IN-DOCKER SERVICE                                                   #
+  ##############################################################################
+  docker-in-docker:
+    # --------------------------------------------------------------------------
+    # IMAGE
+    # --------------------------------------------------------------------------
+    # Specifies the container image and exact digest used for the 
+    # Docker-in-Docker service.
+    image: "docker.io/docker@sha256:bfec1f5159c63a81ca6fdedbd81404d2c0e16378ed0feec3bb3fbf3998847659" # 29.6.2
+
+    # --------------------------------------------------------------------------
+    # PRIVILEGED MODE
+    # --------------------------------------------------------------------------
+    # When set to true, this directive runs the container in privileged mode.
+    # This is necessary for Docker-in-Docker to function correctly.
+    privileged: true
+
+    # --------------------------------------------------------------------------
+    # VOLUMES
+    # --------------------------------------------------------------------------
+    # Defines the mount points between the host system and the container.
+    volumes:
+      - ..:/workspace
+
+    # --------------------------------------------------------------------------
+    # ENVIRONMENT VARIABLES
+    # --------------------------------------------------------------------------
+    # Sets environment variables within the container. These variables are
+    # used to configure the Docker daemon and client.
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+
+  ##############################################################################
+  # ZOT REGISTRY SERVICE                                                       #
+  ##############################################################################
+  zot-registry:
+    # --------------------------------------------------------------------------
+    # IMAGE
+    # --------------------------------------------------------------------------
+    # Specifies the container image and exact digest used for the
+    # Zot registry service.
+    image: "ghcr.io/project-zot/zot@sha256:6f7bf2b8e43437c7c3a121bc80214845c85f27321e66f2ff4be6bf4220775fd7" # v2.1.18
+
+    # --------------------------------------------------------------------------
+    # PORTS
+    # --------------------------------------------------------------------------
+    # Defines the port mappings between the host system and the container.
+    ports:
+      - "5000:5000"

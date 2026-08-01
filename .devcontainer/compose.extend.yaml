@@ -1,0 +1,20 @@
+services:
+  ##############################################################################
+  # DEVELOPMENT CONTAINER SERVICE (LOCAL EXTENSIONS)                           #
+  ##############################################################################
+  devcontainer:
+    # --------------------------------------------------------------------------
+    # DEVCONTAINER LOCAL CUSTOMIZATION
+    # --------------------------------------------------------------------------
+    # This section allows for the definition of user-specific configurations
+    # for the devcontainer service. Directives defined here are intended
+    # for local environment adjustments.
+    #
+    # Note: These customizations are excluded from version control and will
+    # not be committed to the upstream repository. This ensures that personal
+    # configurations do not interfere with the baseline environment.
+    #
+    # Example: Mounting the host's SSH directory in read-only mode.
+    #
+    # volumes:
+    #   - ~/.ssh:/home/vscode/.ssh:ro
