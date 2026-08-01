@@ -1,13 +1,13 @@
-name: "CI"
+name: "CD"
 
 on:
   push:
-    branches:
-      - "main"
-  workflow_dispatch:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: "read"
+  packages: "write"
 
 jobs:
   nix:
@@ -27,13 +27,28 @@ jobs:
           git config --local http.${{ github.server_url }}/.extraheader "Authorization: basic $(echo -n "x-access-token:${{ github.token }}" | base64 --wrap=0)"
           git fetch --quiet --no-tags --depth=1 origin "${{ github.ref }}"
           git checkout --quiet "${{ github.sha }}"
-      - name: "Task: CI"
+      - name: "Task: CD"
         shell: >
           nix develop
           --ignore-env
           --keep-env-var CI
           --keep-env-var HOME
+          --keep-env-var REF_NAME
           --keep-env-var NIX_CONFIG
-          .#ciEnvironment
+          --keep-env-var CONTAINER_REGISTRY
+          --keep-env-var CONTAINER_REGISTRY_USERNAME
+          --keep-env-var CONTAINER_REGISTRY_PASSWORD
+          --keep-env-var CONTAINER_REGISTRY_TLS_VERIFY
+          --keep-env-var IMAGE_NAMESPACE
+          .#cdEnvironment
           -c bash -eo pipefail {0}
-        run: "task run:workflow WORKFLOW_NAME='ci'"
+        run: "task run:workflow WORKFLOW_NAME='cd'"
+        env:
+          REF_NAME: "${{ github.ref_name }}"
+
+          CONTAINER_REGISTRY: "ghcr.io"
+          CONTAINER_REGISTRY_USERNAME: "${{ github.repository_owner }}"
+          CONTAINER_REGISTRY_PASSWORD: "${{ secrets.GITHUB_TOKEN }}"
+          CONTAINER_REGISTRY_TLS_VERIFY: "true"
+
+          IMAGE_NAMESPACE: "${{ github.repository_owner }}"

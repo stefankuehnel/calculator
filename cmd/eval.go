@@ -2,16 +2,20 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
+
+	"github.com/stefankuehnel/calculator/internal/calculator"
 )
 
 // NewEvalCmd makes the eval command.
-// It makes a new eval command for each execution. A cobra command keeps
+// It makes a new eval command for each execution. A Cobra command keeps
 // the flags and the arguments that it got from Execute(). Thus a new
 // command gives a clean state to each test.
 //
-// The command takes the expression as one positional argument. If the
+// The command takes the expression as one positional argument. The
+// expression obeys the grammar in grammar/Calculator.g4. If the
 // expression starts with a minus sign, put "--" before the expression.
 // Without "--", the flag parser reads the expression as a flag:
 //
@@ -25,9 +29,22 @@ func NewEvalCmd() *cobra.Command {
 		Short: "Evaluate an arithmetic expression",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := calculator.Evaluate(args[0])
+			if err != nil {
+				// Give the error to Cobra. The run function in run.go
+				// writes "calculator: " before the error and sets the
+				// exit code.
+				return err
+			}
+
+			// The format 'g' with the precision -1 gives the shortest
+			// text that reads back as the same float64. Thus a result
+			// without a fraction shows as "7" and not as "7.000000".
+			text := strconv.FormatFloat(result, 'g', -1, 64)
+
 			// Write to cmd.OutOrStdout() and not to os.Stdout, because a
-			// test replaces this stream with a buffer and reads the output
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), args[0])
+			// test replaces this stream with a buffer and reads the output.
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), text)
 			if err != nil {
 				return err
 			}

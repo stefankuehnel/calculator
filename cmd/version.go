@@ -16,7 +16,7 @@ import (
 var version = "dev"
 
 // NewVersionCmd makes the version command.
-// It makes a new version command for each execution. A cobra command
+// It makes a new version command for each execution. A Cobra command
 // keeps the flags and the arguments that it got from Execute(). Thus a
 // new command gives a clean state to each test.
 //
@@ -28,7 +28,7 @@ func NewVersionCmd() *cobra.Command {
 		Short: "Print the version number",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Write to cmd.OutOrStdout() and not to os.Stdout, because a
-			// test replaces this stream with a buffer and reads the output
+			// test replaces this stream with a buffer and reads the output.
 			_, err := fmt.Fprintln(cmd.OutOrStdout(), version)
 			if err != nil {
 				return err

@@ -8,7 +8,7 @@ import (
 
 // run starts rootCmd and returns an exit code for the process.
 // It writes each error to rootCmd.ErrOrStderr() and not directly to
-// os.Stderr. A test can not examine os.Stderr. The function that calls
+// os.Stderr. A test cannot examine os.Stderr. The function that calls
 // run must also call os.Exit. os.Exit stops the process immediately. If
 // run called os.Exit, a test could not examine the exit code or the
 // error text.

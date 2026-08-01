@@ -22,7 +22,7 @@ func (errWriter) Write(_ []byte) (int, error) {
 //     Execute() on the root command reads the arguments and sends them
 //     to the correct subcommand. If you set the arguments on a child
 //     command, Cobra does not do this step.
-//   - Call NewRootCmd() to make a new command for each test. A cobra
+//   - Call NewRootCmd() to make a new command for each test. A Cobra
 //     command keeps the data of the last execution, and that data
 //     changes the result of the next test.
 //   - To read the output, call cmd.SetOut() and cmd.SetErr() on the root

@@ -11,7 +11,7 @@ import (
 //     Execute() on the root command reads the arguments and sends them
 //     to the correct subcommand. If you set the arguments on a child
 //     command, Cobra does not do this step.
-//   - Call NewRootCmd() to make a new command for each test. A cobra
+//   - Call NewRootCmd() to make a new command for each test. A Cobra
 //     command keeps the data of the last execution, and that data
 //     changes the result of the next test.
 //   - To read the output, call cmd.SetOut() and cmd.SetErr() on the root
@@ -26,7 +26,7 @@ func TestEvalCmd(t *testing.T) {
 		rootCmd.SetErr(out)
 
 		// Set the arguments on the root command, because Execute() on the
-		// root command sends them to the subcommand
+		// root command sends them to the subcommand.
 		rootCmd.SetArgs([]string{"eval", "1 + 2"})
 
 		// Act
@@ -38,7 +38,7 @@ func TestEvalCmd(t *testing.T) {
 		}
 
 		outStr := out.String()
-		expectedText := "1 + 2\n"
+		expectedText := "3\n"
 		if outStr != expectedText {
 			t.Errorf("expected: %q; got: %q", expectedText, outStr)
 		}
@@ -53,7 +53,7 @@ func TestEvalCmd(t *testing.T) {
 		rootCmd.SetErr(out)
 
 		// Set the arguments on the root command, because Execute() on the
-		// root command sends them to the subcommand
+		// root command sends them to the subcommand.
 		rootCmd.SetArgs([]string{"eval", "--", "-3 * 4"})
 
 		// Act
@@ -65,10 +65,54 @@ func TestEvalCmd(t *testing.T) {
 		}
 
 		outStr := out.String()
-		expectedText := "-3 * 4\n"
+		expectedText := "-12\n"
 		if outStr != expectedText {
 			t.Errorf("expected: %q; got: %q", expectedText, outStr)
 		}
+	})
+
+	t.Run("with an invalid expression", func(t *testing.T) {
+		// Arrange
+		rootCmd := NewRootCmd()
+
+		out := new(bytes.Buffer)
+		rootCmd.SetOut(out)
+		rootCmd.SetErr(out)
+
+		rootCmd.SetArgs([]string{"eval", "1 +"})
+
+		// Act
+		err := rootCmd.Execute()
+
+		// Assert
+		if err == nil {
+			t.Error("expected an error, got nil")
+		}
+
+		// A mistake in the expression is not a mistake in the command.
+		// Thus the CLI must show no usage data.
+		assertNoUsage(t, out.String())
+	})
+
+	t.Run("with a division by zero", func(t *testing.T) {
+		// Arrange
+		rootCmd := NewRootCmd()
+
+		out := new(bytes.Buffer)
+		rootCmd.SetOut(out)
+		rootCmd.SetErr(out)
+
+		rootCmd.SetArgs([]string{"eval", "1 / 0"})
+
+		// Act
+		err := rootCmd.Execute()
+
+		// Assert
+		if err == nil {
+			t.Error("expected an error, got nil")
+		}
+
+		assertNoUsage(t, out.String())
 	})
 
 	t.Run("with no args", func(t *testing.T) {
@@ -121,7 +165,7 @@ func TestEvalCmd(t *testing.T) {
 		rootCmd.SetErr(new(bytes.Buffer))
 
 		// Set the arguments on the root command, because Execute() on the
-		// root command sends them to the subcommand
+		// root command sends them to the subcommand.
 		rootCmd.SetArgs([]string{"eval", "1 + 2"})
 
 		// Act

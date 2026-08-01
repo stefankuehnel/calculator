@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// assertNoUsage fails the test if out contains the error data of cobra:
+// assertNoUsage fails the test if out contains the error data of Cobra:
 // the "Error: " line, the usage data, or the note about the --help flag.
-// Only the run function in run.go shows an error. If cobra also shows
+// Only the run function in run.go shows an error. If Cobra also shows
 // the error, the CLI shows the same failure two times.
 func assertNoUsage(t *testing.T, out string) {
 	t.Helper()

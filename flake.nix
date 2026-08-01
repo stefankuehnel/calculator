@@ -43,13 +43,11 @@
       dependencies = pkgs: [
         pkgs.antlr4
 
+        pkgs.git
+
         pkgs.go
         pkgs.go-task
         pkgs.golangci-lint
-
-        pkgs.semver-tool
-
-        pkgs.skopeo
 
         pkgs.nix
       ];
@@ -58,13 +56,21 @@
         pkgs.opencode
         pkgs.claude-code
 
-        pkgs.cobra-cli
-
         pkgs.docker
 
-        pkgs.nix
+        pkgs.coreutils
+
         pkgs.nixd
         pkgs.nixfmt
+      ];
+
+      ciDependencies = pkgs: [
+      ];
+
+      cdDependencies = pkgs: [
+        pkgs.semver-tool
+
+        pkgs.skopeo
       ];
 
       fmtDependencies = pkgs: pkgs.nixfmt-tree;
@@ -76,11 +82,16 @@
         { pkgs, ... }:
         {
           ciEnvironment = pkgs.mkShellNoCC {
-            packages = dependencies pkgs;
+            packages = (dependencies pkgs) ++ (ciDependencies pkgs);
+          };
+
+          cdEnvironment = pkgs.mkShellNoCC {
+            packages = (dependencies pkgs) ++ (cdDependencies pkgs);
           };
 
           devEnvironment = pkgs.mkShellNoCC {
-            packages = (dependencies pkgs) ++ (devDependencies pkgs);
+            packages =
+              (dependencies pkgs) ++ (ciDependencies pkgs) ++ (cdDependencies pkgs) ++ (devDependencies pkgs);
           };
         }
       );
@@ -95,7 +106,8 @@
 
           devEnvironment = pkgs.buildEnv {
             name = "development environment";
-            paths = (dependencies pkgs) ++ (devDependencies pkgs);
+            paths =
+              (dependencies pkgs) ++ (ciDependencies pkgs) ++ (cdDependencies pkgs) ++ (devDependencies pkgs);
           };
         }
       );

@@ -9,7 +9,11 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
-calculator
+#
+# The slash at the start keeps the rule on the compiled binary in the
+# root directory. Without the slash, the rule also removes the directory
+# internal/calculator/ from git.
+/calculator
 *.exe
 *.exe~
 *.dll
@@ -30,5 +34,12 @@ go.work
 
 # Task
 .task/
+
+# ANTLR
+#
+# ANTLR writes these files beside the generated Go code. Only a grammar
+# that imports another grammar reads them.
+*.interp
+*.tokens
 
 # End of https://www.toptal.com/developers/gitignore/api/dotenv,go

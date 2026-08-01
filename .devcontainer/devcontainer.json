@@ -10,9 +10,9 @@
   ##############################################################################
   # DOCKER COMPOSE CONFIGURATION                                               #
   ##############################################################################
-  # Specifies the source files for the Docker Compose setup, the primary 
-  # service to connect to, and the container workspace path.
-  # 
+  # These keys give the source files for Docker Compose. They also give the
+  # first service to connect to, and the workspace path in the container.
+  #
   # See: https://containers.dev/implementors/json_reference/#compose-specific
   */
   "service": "devcontainer",
@@ -23,16 +23,16 @@
   ##############################################################################
   # FEATURES                                                                   #
   ##############################################################################
-  # Installs and configures additional tools into the container environment.
-  # 
+  # A feature adds more tools to the container and sets them up.
+  #
   # See: https://containers.dev/features
   */
   "features": {
     /* ----------------------------------------------------------------------
        NIX FEATURE
-       This feature installs the Nix package manager in the development 
-       container, allowing for declarative package management and reproducible 
-       development environments.
+       This feature adds the Nix package manager to the development
+       container. Nix gives you the same packages and the same environment
+       again.
 
        See: https://github.com/devcontainers/features/tree/main/src/nix
        See: https://nixos.org/
@@ -47,9 +47,9 @@
   ##############################################################################
   # FORWARD PORTS                                                              #
   ##############################################################################
-  # Specifies ports to forward from the container to the host machine, enabling
-  # access to services running inside the container.
-  # 
+  # These keys give the ports that go from the container to the host machine.
+  # Thus you can get access to the services in the container.
+  #
   # See: https://containers.dev/implementors/json_reference/#general-properties
   */
   "forwardPorts": [
@@ -66,8 +66,8 @@
   ##############################################################################
   # CUSTOMIZATIONS                                                             #
   ##############################################################################
-  # Customizes the development container environment, including Visual Studio 
-  # Code extensions and settings.
+  # These keys change the development container environment. They set the
+  # Visual Studio Code extensions and the Visual Studio Code settings.
   #
   # See: https://containers.dev/supporting#visual-studio-code
   */
@@ -75,8 +75,8 @@
     "vscode": {
       /* --------------------------------------------------------------------
          VISUAL STUDIO CODE EXTENSIONS
-         Visual Studio Code extensions to be installed automatically in the
-         development container environment.
+         The development container adds these Visual Studio Code extensions
+         automatically.
 
          See: https://marketplace.visualstudio.com/vscode
          -------------------------------------------------------------------- */
@@ -91,8 +91,8 @@
 
       /* --------------------------------------------------------------------
          VISUAL STUDIO CODE SETTINGS
-         Custom settings for Visual Studio Code to be applied automatically in 
-         the development container environment.
+         The development container applies these Visual Studio Code settings
+         automatically.
 
          See: https://code.visualstudio.com/docs/configure/settings
          -------------------------------------------------------------------- */
@@ -122,46 +122,44 @@
   ##############################################################################
   # LIFECYCLE SCRIPTS                                                          #
   ##############################################################################
-  # Defines commands that run at specific points in the lifecycle of the 
-  # development container, allowing for custom setup and configuration tasks.
+  # These commands run at given points in the life of the development
+  # container. Thus you can do your own setup steps and configuration steps.
   #
   # See: https://containers.dev/implementors/json_reference/#lifecycle-scripts
   */
 
   /* ------------------------------------------------------------------------
      ON CREATE COMMAND
-     This command is the first of three (along with 'updateContentCommand' 
-     and 'postCreateCommand') that finalizes container setup when a dev 
-     container is created. It and subsequent commands execute inside the 
-     container immediately after it has started for the first time.
+     Three commands complete the setup of a new dev container. This command
+     is the first of the three. The other two are 'updateContentCommand' and
+     'postCreateCommand'. These commands run in the container immediately
+     after it starts the first time.
 
      See: https://containers.dev/implementors/json_reference/#lifecycle-scripts
      ------------------------------------------------------------------------ */
   "onCreateCommand": {
     /* ----------------------------------------------------------------------
        NIX PROFILE ADD
-       This command adds the 'devEnvironment' defined in the 'flake.nix' to the 
-       Nix profile, ensuring that all specified development dependencies are 
-       available in the container environment.
+       This command adds the 'devEnvironment' from the 'flake.nix' to the Nix
+       profile. Thus the container has each development dependency.
        ---------------------------------------------------------------------- */
     "nix-profile-add--devEnvironment": "git add \"flake.nix\" && nix profile add .#devEnvironment"
   },
 
   /* ------------------------------------------------------------------------
-    UPDATE CONTENT COMMAND
-    This command is the second of three that finalizes container setup when a 
-    dev container is created. It executes inside the container 
-    after 'onCreateCommand' whenever new content is available in the source 
-    tree during the creation process.
-  
-    See: https://containers.dev/implementors/json_reference/#lifecycle-scripts
-    ------------------------------------------------------------------------- */
+     UPDATE CONTENT COMMAND
+     This command is the second of the three commands that complete the setup
+     of a new dev container. It runs in the container after 'onCreateCommand'.
+     It runs each time the source tree gets new content during the setup.
+
+     See: https://containers.dev/implementors/json_reference/#lifecycle-scripts
+     ------------------------------------------------------------------------ */
   "updateContentCommand": {
     /* ----------------------------------------------------------------------
        GIT UPDATE INDEX --SKIP-WORKTREE
-       This command marks the 'compose.extend.yaml' file as 'skip-worktree' in 
-       git, preventing it from being tracked and allowing local modifications 
-       without affecting the upstream repository.
+       This command marks the 'compose.extend.yaml' file as 'skip-worktree'
+       in git. Then git ignores each change to the file. Thus you can change
+       the file on your machine, and the upstream repository stays the same.
 
        See: https://til.stefan-dev.de/git/git-ignore-tracked-files/
        ---------------------------------------------------------------------- */

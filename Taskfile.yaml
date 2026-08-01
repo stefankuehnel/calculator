@@ -1,6 +1,4 @@
-# https://taskfile.dev
-
-version: "3"
+version: "3.48"
 
 dotenv:
   - ".env"
@@ -8,15 +6,17 @@ dotenv:
 env:
   CGO_ENABLED: "0"
 
+vars:
+  REF_NAME:
+    sh: echo "${REF_NAME:-$(git tag --sort=-v:refname | head -n 1)}"
+
 tasks:
   default:
-    desc: "Run default tasks"
+    desc: "Run default task"
     cmds:
       - task: "lint"
-      - task: "build"
       - task: "test:coverage"
-      - defer:
-          task: "clean"
+      - task: "build"
 
   init:
     desc: "Initialize project"
@@ -24,162 +24,127 @@ tasks:
       - task: "init:env"
 
   init:env:
-    desc: "Initialize environment variables"
+    desc: "Initialize project with environment variables"
     cmds:
       - |
-        cat <<EOF > .env
+        cat <<'EOF' > .env
         CONTAINER_REGISTRY="{{ .CONTAINER_REGISTRY }}"
         CONTAINER_REGISTRY_USERNAME="{{ .CONTAINER_REGISTRY_USERNAME }}"
         CONTAINER_REGISTRY_PASSWORD="{{ .CONTAINER_REGISTRY_PASSWORD }}"
+        CONTAINER_REGISTRY_TLS_VERIFY="{{ .CONTAINER_REGISTRY_TLS_VERIFY }}"
 
         IMAGE_NAMESPACE="{{ .IMAGE_NAMESPACE }}"
         EOF
     requires:
       vars:
-        - "CONTAINER_REGISTRY"
-        - "CONTAINER_REGISTRY_USERNAME"
-        - "CONTAINER_REGISTRY_PASSWORD"
+        - name: "CONTAINER_REGISTRY"
+        - name: "CONTAINER_REGISTRY_USERNAME"
+        - name: "CONTAINER_REGISTRY_PASSWORD"
 
-        - "IMAGE_NAMESPACE"
-
-  load:
-    desc: "Load project"
-    cmds:
-      - task: "load:docker"
-
-  load:docker:
-    desc: "Load project with Docker"
-    cmds:
-      - "docker load --quiet --input {{ .IMAGE_ARCHIVE_PATH }}"
+        - name: "IMAGE_NAMESPACE"
     vars:
-      IMAGE_ARCHIVE_PATH:
-        sh:
-          "nix build --no-link --print-out-paths .#calculator-docker"
+      CONTAINER_REGISTRY_TLS_VERIFY: "true"
 
-  run:
-    desc: "Run project"
+  codegen:
+    desc: "Generate code"
     cmds:
-      - task: "run:nix"
+      - task: "codegen:antlr4"
 
-  run:nix:
-    desc: "Run project with Nix"
+  codegen:antlr4:
+    desc: "Generate code with ANTLR4"
     cmds:
-      - "nix run . -- {{ .CLI_ARGS }}"
+      - task: "codegen:antlr4:go"
 
-  run:docker:
-    desc: "Run project with Docker"
-    deps:
-      - "load:docker"
+  codegen:antlr4:go:
+    desc: "Generate Go code with ANTLR4"
     cmds:
-      - "docker run --rm {{ .IMAGE_NAME }}:{{ .IMAGE_TAG }} {{ .CLI_ARGS }}"
+      - task: "codegen:antlr4:go:internal"
+        vars:
+          ANTLR4_G4_INPUT_DIR: "{{ .ANTLR4_G4_INPUT_DIR }}"
+          ANTLR4_G4_INPUT_FILE: "{{ .ANTLR4_G4_INPUT_FILE }}"
+          ANTLR4_GO_PACKAGE_NAME: "{{ .ANTLR4_GO_PACKAGE_NAME }}"
+          ANTLR4_GO_OUTPUT_DIR: "{{ .ANTLR4_GO_OUTPUT_DIR }}"
     vars:
-      IMAGE_NAME:
-        sh:
-          "nix eval --raw .#calculator-docker.imageName"
-      IMAGE_TAG:
-        sh:
-          "nix eval --raw .#calculator-docker.imageTag"
+      ANTLR4_G4_INPUT_DIR: "{{ .ROOT_DIR }}/grammar"
+      ANTLR4_G4_INPUT_FILE: "Calculator.g4"
+      ANTLR4_GO_PACKAGE_NAME: "parser"
+      ANTLR4_GO_OUTPUT_DIR: "{{ .ROOT_DIR }}/internal/{{ .ANTLR4_GO_PACKAGE_NAME }}"
+
+  codegen:antlr4:go:internal:
+    internal: true
+    dir: "{{ .ANTLR4_G4_INPUT_DIR }}"
+    sources:
+      - "{{ .ANTLR4_G4_INPUT_DIR }}/{{ .ANTLR4_G4_INPUT_FILE }}"
+    generates:
+      - "{{ .ANTLR4_GO_OUTPUT_DIR }}/**/*.go"
+      - "{{ .ANTLR4_GO_OUTPUT_DIR }}/**/*.interp"
+      - "{{ .ANTLR4_GO_OUTPUT_DIR }}/**/*.tokens"
+    status:
+      # "sources" alone shows "up-to-date" when the grammar does not change.
+      # It shows this also when the generated code is not there. Thus make
+      # the code again when the output directory is not there.
+      - "test -d {{ .ANTLR4_GO_OUTPUT_DIR }}"
+    cmds:
+      - "rm -rf {{ .ANTLR4_GO_OUTPUT_DIR }}"
+      - "antlr4 -Dlanguage=Go -o {{ .ANTLR4_GO_OUTPUT_DIR }} -package {{ .ANTLR4_GO_PACKAGE_NAME }} {{ .ANTLR4_G4_INPUT_FILE }}"
     requires:
       vars:
-        - "IMAGE_NAME"
-        - "IMAGE_TAG"
+        - name: "ANTLR4_G4_INPUT_DIR"
+        - name: "ANTLR4_G4_INPUT_FILE"
+        - name: "ANTLR4_GO_PACKAGE_NAME"
+        - name: "ANTLR4_GO_OUTPUT_DIR"
 
-  run:ci:
-    desc: "Run CI/CD"
+  format:
+    desc: "Format project"
     cmds:
-      - task: "run:ci:docker"
+      - task: "format:go"
+      - task: "format:nix"
 
-  run:ci:docker:
-    desc: "Run CI/CD with Docker"
-    preconditions:
-      - sh: '[ -n "{{ .REF_NAME }}" ]'
-        msg: 'The commit HEAD does not have a tag. The task cannot send an image to the registry. Add a tag with this command: git tag --sign --message "calculator v{{ .IMAGE_TAG }}" v{{ .IMAGE_TAG }}'
-
-      - sh: '[ "{{ .REF_NAME }}" = "v{{ .IMAGE_TAG }}" ]'
-        msg: 'The tag "{{ .REF_NAME }}" is not the same as the project version "v{{ .IMAGE_TAG }}". The task cannot send an image to the registry. Change the tag to "v{{ .IMAGE_TAG }}". The file calculator.nix contains the project version.'
+  format:go:
+    desc: "Format project with Go"
     cmds:
-      - |
-          docker run \
-            --rm \
-            --network host \
-            --volume "{{ .ROOT_DIR }}:/mnt/local" \
-            --workdir "/mnt/local" \
-            --env NIX_CONFIG \
-            --env CI \
-            --env REF_NAME \
-            --env CONTAINER_REGISTRY \
-            --env CONTAINER_REGISTRY_USERNAME \
-            --env CONTAINER_REGISTRY_PASSWORD \
-            --env CONTAINER_REGISTRY_TLS_VERIFY \
-            --env IMAGE_NAMESPACE \
-              {{ .NIX_IMAGE }} \
-                sh -c "\
-                  git config \
-                    --global \
-                    --add safe.directory /mnt/local && \
-                  nix develop .#ciEnvironment \
-                    --ignore-env \
-                    --keep-env-var NIX_CONFIG \
-                    --keep-env-var CI \
-                    --keep-env-var HOME \
-                    --keep-env-var REF_NAME \
-                    --keep-env-var CONTAINER_REGISTRY \
-                    --keep-env-var CONTAINER_REGISTRY_USERNAME \
-                    --keep-env-var CONTAINER_REGISTRY_PASSWORD \
-                    --keep-env-var CONTAINER_REGISTRY_TLS_VERIFY \
-                    --keep-env-var IMAGE_NAMESPACE \
-                    --command \
-                      task deploy \
-                "
-    env:
-      NIX_CONFIG: "{{ .NIX_CONFIG }}"
+      - task: "format:go:golangci-lint"
 
-      CI: "{{ .CI }}"
-
-      REF_NAME: "{{ .REF_NAME }}"
-
-      CONTAINER_REGISTRY: "{{ .CONTAINER_REGISTRY }}"
-      CONTAINER_REGISTRY_USERNAME: "{{ .CONTAINER_REGISTRY_USERNAME }}"
-      CONTAINER_REGISTRY_PASSWORD: "{{ .CONTAINER_REGISTRY_PASSWORD }}"
-      CONTAINER_REGISTRY_TLS_VERIFY: "{{ .CONTAINER_REGISTRY_TLS_VERIFY }}"
-
-      IMAGE_NAMESPACE: "{{ .IMAGE_NAMESPACE }}"
-      IMAGE_TAG: "{{ .IMAGE_TAG }}"
-    vars:
-      NIX_IMAGE: "docker.io/nixos/nix@sha256:b9c9611c8530fa8049a1215b20638536e1e71dcaf85212e47845112caf3adeea" # v2.34.0
-      NIX_CONFIG: "experimental-features = nix-command flakes"
-
-      CI: "true"
-
-      REF_NAME:
-        sh:
-          "git tag --points-at HEAD --sort=-v:refname | head -n 1"
-
-      CONTAINER_REGISTRY: "zot-registry:5000"
-      CONTAINER_REGISTRY_USERNAME: "intentionally-left-blank" # ignored by zot-registry, but required for skopeo
-      CONTAINER_REGISTRY_PASSWORD: "intentionally-left-blank" # ignored by zot-registry, but required for skopeo
-      CONTAINER_REGISTRY_TLS_VERIFY: "false"
-
-      IMAGE_NAMESPACE: "localhost"
-      IMAGE_TAG:
-        sh:
-          "nix eval --raw .#calculator-docker.imageTag"
-
-  build:
-    desc: "Build project"
-    cmds:
-      - task: "build:nix"
-
-  build:nix:
-    desc: "Build project with Nix"
+  format:go:golangci-lint:
+    desc: "Format project with Golangci-lint"
     sources:
+      - "**/*.g4"
       - "**/*.go"
       - "go.mod"
       - "go.sum"
-      - "flake.nix"
-      - "flake.lock"
+    deps:
+      - task: "codegen:antlr4:go"
     cmds:
-      - "nix build --no-link --print-out-paths ."
+      - "golangci-lint fmt ./..."
+
+  format:nix:
+    desc: "Format project with Nixfmt"
+    sources:
+      - "**/*.nix"
+    cmds:
+      - "nix fmt"
+
+  lint:
+    desc: "Lint project"
+    cmds:
+      - task: "lint:go"
+
+  lint:go:
+    desc: "Lint project with Go"
+    cmds:
+      - task: "lint:go:golangci-lint"
+
+  lint:go:golangci-lint:
+    desc: "Lint project with Golangci-lint"
+    sources:
+      - "**/*.g4"
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+    deps:
+      - task: "codegen:antlr4:go"
+    cmds:
+      - "golangci-lint run ./..."
 
   test:
     desc: "Test project"
@@ -188,6 +153,13 @@ tasks:
 
   test:go:
     desc: "Test project with Go Test"
+    sources:
+      - "**/*.g4"
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+    deps:
+      - task: "codegen:antlr4:go"
     cmds:
       - "go test ./..."
 
@@ -197,9 +169,247 @@ tasks:
       - task: "test:coverage:go"
 
   test:coverage:go:
-    desc: "Test project with Go Test and with coverage"
+    desc: "Test project with coverage with Go"
+    sources:
+      - "**/*.g4"
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+    generates:
+      - "coverage.out"
+    deps:
+      - task: "codegen:antlr4:go"
     cmds:
       - "go test -coverprofile=coverage.out ./..."
+
+  build:
+    desc: "Build project"
+    cmds:
+      - task: "build:nix"
+
+  build:nix:
+    desc: "Build project with Nix"
+    sources:
+      - "**/*.g4"
+      - "**/*.go"
+      - "**/*.nix"
+      - "go.mod"
+      - "go.sum"
+      - "flake.nix"
+      - "flake.lock"
+    deps:
+      - task: "codegen:antlr4:go"
+    cmds:
+      - "nix build --no-link --print-out-paths .#calculator"
+
+  load:
+    desc: "Load project"
+    cmds:
+      - task: "load:docker"
+
+  load:docker:
+    desc: "Load project with Docker"
+    sources:
+      - "{{ .NIX_STORE_PATH }}"
+    cmds:
+      - "docker load --quiet --input {{ .NIX_STORE_PATH }}"
+    vars:
+      NIX_STORE_PATH:
+        sh:
+          "nix build --no-link --print-out-paths .#calculator-docker" # ToDo: Use a global variable here.
+
+  run:
+    desc: "Run project"
+    cmds:
+      - task: "run:nix"
+
+  run:nix:
+    desc: "Run project with Nix"
+    cmds:
+      - "nix run .#calculator -- {{ .CLI_ARGS }}" # ToDo: Use a global variable here.
+
+  run:docker:
+    desc: "Run project with Docker"
+    deps:
+      - task: "load:docker"
+    cmds:
+      - "docker run --rm {{ .DOCKER_RUN_FLAGS }} {{ .IMAGE_NAME }}:{{ .IMAGE_TAG }} {{ .CLI_ARGS }}"
+    vars:
+      DOCKER_RUN_FLAGS: ""
+
+      IMAGE_NAME:
+        sh:
+          "nix eval --raw .#calculator-docker.imageName" # ToDo: Use a global variable here.
+
+      IMAGE_TAG:
+        sh:
+          "nix eval --raw .#calculator-docker.imageTag" # ToDo: Use a global variable here.
+
+  run:workflow:
+    desc: "Run project with Workflow"
+    interactive: true
+    cmds:
+      - task: "run:workflow:{{ .WORKFLOW_NAME }}"
+    requires:
+      vars:
+        - name: "WORKFLOW_NAME"
+          enum:
+            - "ci"
+            - "cd"
+
+  run:workflow:ci:
+    internal: true
+    cmds:
+      - task: "default"
+
+  run:workflow:cd:
+    internal: true
+    cmds:
+      - task: "deploy"
+
+  run:workflow:local:
+    desc: "Run project locally with Workflow"
+    interactive: true
+    cmds:
+      - task: "run:workflow:local:{{ .WORKFLOW_NAME }}"
+    requires:
+      vars:
+        - name: "WORKFLOW_NAME"
+          enum:
+            - "ci"
+            - "cd"
+
+  run:workflow:local:ci:
+    internal: true
+    cmds:
+      - task: "run:workflow:local:internal"
+        vars:
+          NIX_DEVELOP_ENVIRONMENT: "ciEnvironment"
+          NIX_DEVELOP_COMMAND: "task run:workflow WORKFLOW_NAME='ci' && task clean"
+
+  run:workflow:local:cd:
+    internal: true
+    deps:
+      - task: "validate:git:tag"
+    cmds:
+      - task: "clean:skopeo"
+        vars:
+          CONTAINER_REGISTRY: "zot-registry:5000"
+          CONTAINER_REGISTRY_USERNAME: "intentionally-left-blank" # zot-registry ignores this value
+          CONTAINER_REGISTRY_PASSWORD: "intentionally-left-blank" # zot-registry ignores this value
+          CONTAINER_REGISTRY_TLS_VERIFY: "false"
+
+          IMAGE_NAMESPACE: "internal"
+          IMAGE_NAME: "{{ .IMAGE_NAME }}"
+      - task: "run:workflow:local:internal"
+        vars:
+          NIX_DEVELOP_ENVIRONMENT: "cdEnvironment"
+          NIX_DEVELOP_COMMAND: "task run:workflow WORKFLOW_NAME='cd' && task clean"
+          NIX_DEVELOP_ENVIRONMENT_VARIABLES:
+            map:
+              REF_NAME: "{{ .REF_NAME }}"
+
+              CONTAINER_REGISTRY: "zot-registry:5000"
+              CONTAINER_REGISTRY_USERNAME: "intentionally-left-blank" # zot-registry ignores this value
+              CONTAINER_REGISTRY_PASSWORD: "intentionally-left-blank" # zot-registry ignores this value
+              CONTAINER_REGISTRY_TLS_VERIFY: "false"
+
+              IMAGE_NAMESPACE: "internal"
+              IMAGE_TAG: "{{ .IMAGE_TAG }}"
+    vars:
+      IMAGE_NAME:
+        sh: "nix eval --raw .#calculator-docker.imageName" # ToDo: Use a global variable here.
+
+      IMAGE_TAG:
+        sh:
+          "nix eval --raw .#calculator-docker.imageTag" # ToDo: Use a global variable here.
+
+  run:workflow:local:internal:
+    internal: true
+    cmds:
+      # The container runs as root. Thus the files that the workflow makes
+      # in the bind mount belong to root, and the user on the host cannot
+      # remove them. This command gives these files back to the user on the
+      # host. It is a "defer" command, so it also runs when the workflow
+      # stops with an error.
+      - defer: |
+          docker run \
+            --rm \
+            --volume "{{ .ROOT_DIR }}:/mnt/local" \
+            --entrypoint "chown" \
+              {{ .NIX_DEVELOP_DOCKER_IMAGE_REFERENCE }} \
+                --recursive \
+                --from "root:root" \
+                "{{ .HOST_USER_ID }}:{{ .HOST_GROUP_ID }}" \
+                "/mnt/local"
+      - cmd: |
+          docker run \
+            --rm \
+            --network "host" \
+            --volume "{{ .ROOT_DIR }}:/mnt/local" \
+            --workdir "/mnt/local" \
+            --env CI="true" \
+            --env NIX_CONFIG="experimental-features = nix-command flakes"
+            {{- range $key, $value := .NIX_DEVELOP_ENVIRONMENT_VARIABLES_MAP }} \
+            --env {{ $key }}="{{ $value }}"
+            {{- end }} \
+              {{ .NIX_DEVELOP_DOCKER_IMAGE_REFERENCE }} \
+                bash -c "\
+                  git config \
+                    --global \
+                    --add safe.directory /mnt/local && \
+                  nix develop .#{{ .NIX_DEVELOP_ENVIRONMENT }} \
+                    --ignore-env \
+                    --keep-env-var CI \
+                    --keep-env-var HOME \
+                    --keep-env-var NIX_CONFIG
+                    {{- range $key, $value := .NIX_DEVELOP_ENVIRONMENT_VARIABLES_MAP }} \
+                    --keep-env-var {{ $key }}
+                    {{- end }} \
+                    --command bash -c \"{{ .NIX_DEVELOP_COMMAND }}\" \
+                "
+    requires:
+      vars:
+        - name: "NIX_DEVELOP_ENVIRONMENT"
+          enum:
+            - "ciEnvironment"
+            - "cdEnvironment"
+            - "devEnvironment"
+        - name: "NIX_DEVELOP_COMMAND"
+    vars:
+      NIX_DEVELOP_DOCKER_IMAGE_REFERENCE: "docker.io/nixos/nix@sha256:b9c9611c8530fa8049a1215b20638536e1e71dcaf85212e47845112caf3adeea" # v2.34.0
+      NIX_DEVELOP_ENVIRONMENT_VARIABLES_MAP:
+        ref: "default (dict) .NIX_DEVELOP_ENVIRONMENT_VARIABLES"
+
+      HOST_USER_ID:
+        sh: "id --user"
+
+      HOST_GROUP_ID:
+        sh: "id --group"
+
+  validate:
+    desc: "Validate project"
+    cmds:
+      - task: "validate:git"
+
+  validate:git:
+    desc: "Validate project with Git"
+    cmds:
+      - task: "validate:git:tag"
+
+  validate:git:tag:
+    desc: "Validate project Git tag with Git"
+    preconditions:
+      - sh: '{{ not (empty .REF_NAME) }}'
+        msg: 'REF_NAME is empty. Make a signed tag: git tag --sign --message "calculator v{{ .IMAGE_TAG }}" "v{{ .IMAGE_TAG }}"'
+      - sh: '{{ eq .REF_NAME (printf "v%s" .IMAGE_TAG) }}'
+        msg: 'REF_NAME is "{{ .REF_NAME }}". It must be "v{{ .IMAGE_TAG }}" to match the image tag. Make a signed tag: git tag --sign --message "calculator v{{ .IMAGE_TAG }}" "v{{ .IMAGE_TAG }}"'
+      - sh: 'test "$(semver validate "{{ .REF_NAME }}")" = valid'
+        msg: 'REF_NAME is "{{ .REF_NAME }}". A tag must have the format "v<MAJOR>.<MINOR>.<PATCH>". Make a signed tag: git tag --sign --message "calculator v{{ .IMAGE_TAG }}" "v{{ .IMAGE_TAG }}"'
+    vars:
+      IMAGE_TAG:
+        sh:
+          "nix eval --raw .#calculator-docker.imageTag" # ToDo: Use a global variable here.
 
   deploy:
     desc: "Deploy project"
@@ -208,127 +418,79 @@ tasks:
 
   deploy:skopeo:
     desc: "Deploy project with Skopeo"
-    deps:
-      - "lint"
-      - "build"
-      - "test:coverage"
     cmds:
-      - task: "deploy:skopeo:internal"
-        if: '{{ $ref := default "" .REF_NAME }}{{ and (regexMatch `^v[0-9]+\.[0-9]+\.[0-9]+$` $ref) (eq $ref (printf "v%s" .IMAGE_TAG)) }}'
+      - task: "validate:git:tag"
+      - task: "lint"
+      - task: "test:coverage"
+      - task: "build"
+      - if: '{{ eq .CI "true" }}'
+        task: "deploy:skopeo:internal"
         vars:
           IMAGE_ARCHIVE_PATH: "{{ .IMAGE_ARCHIVE_PATH }}"
           IMAGE_NAME: "{{ .IMAGE_NAME }}"
-          IMAGE_TAG: "latest"
-
-      - task: "deploy:skopeo:internal"
-        if: '{{ $ref := default "" .REF_NAME }}{{ and (regexMatch `^v[0-9]+\.[0-9]+\.[0-9]+$` $ref) (eq $ref (printf "v%s" .IMAGE_TAG)) }}'
-        vars:
-          IMAGE_ARCHIVE_PATH: "{{ .IMAGE_ARCHIVE_PATH }}"
-          IMAGE_NAME: "{{ .IMAGE_NAME }}"
-          IMAGE_TAG:
-            sh: |
-              MAJOR="$(semver get major {{ .IMAGE_TAG }})"
-
-              echo "v${MAJOR}"
-
-      - task: "deploy:skopeo:internal"
-        if: '{{ $ref := default "" .REF_NAME }}{{ and (regexMatch `^v[0-9]+\.[0-9]+\.[0-9]+$` $ref) (eq $ref (printf "v%s" .IMAGE_TAG)) }}'
-        vars:
-          IMAGE_ARCHIVE_PATH: "{{ .IMAGE_ARCHIVE_PATH }}"
-          IMAGE_NAME: "{{ .IMAGE_NAME }}"
-          IMAGE_TAG:
-            sh: |
-              MAJOR="$(semver get major {{ .IMAGE_TAG }})"
-              MINOR="$(semver get minor {{ .IMAGE_TAG }})"
-
-              echo "v${MAJOR}.${MINOR}"
-
-      - task: "deploy:skopeo:internal"
-        if: '{{ $ref := default "" .REF_NAME }}{{ and (regexMatch `^v[0-9]+\.[0-9]+\.[0-9]+$` $ref) (eq $ref (printf "v%s" .IMAGE_TAG)) }}'
-        vars:
-          IMAGE_ARCHIVE_PATH: "{{ .IMAGE_ARCHIVE_PATH }}"
-          IMAGE_NAME: "{{ .IMAGE_NAME }}"
-          IMAGE_TAG:
-            sh: |
-              MAJOR="$(semver get major {{ .IMAGE_TAG }})"
-              MINOR="$(semver get minor {{ .IMAGE_TAG }})"
-              PATCH="$(semver get patch {{ .IMAGE_TAG }})"
-
-              echo "v${MAJOR}.${MINOR}.${PATCH}"
+          IMAGE_TAG: "{{ .IMAGE_TAG }}"
     vars:
+      IMAGE_ARCHIVE_PATH:
+        sh:
+          "nix build --no-link --print-out-paths .#calculator-docker" # ToDo: Use a global variable here.
+
       IMAGE_NAME:
         sh:
-          "nix eval --raw .#calculator-docker.imageName"
+          "nix eval --raw .#calculator-docker.imageName" # ToDo: Use a global variable here.
 
       IMAGE_TAG:
         sh:
-          "nix eval --raw .#calculator-docker.imageTag"
-
-      IMAGE_ARCHIVE_PATH:
-        sh:
-          "nix build --no-link --print-out-paths .#calculator-docker"
-    requires:
-      vars:
-        - "IMAGE_NAME"
-        - "IMAGE_TAG"
-        - "IMAGE_ARCHIVE_PATH"
+          "nix eval --raw .#calculator-docker.imageTag" # ToDo: Use a global variable here.
 
   deploy:skopeo:internal:
     internal: true
-    silent: true
+    deps:
+      - task: "validate:git:tag"
     cmds:
-      - |
-        skopeo --insecure-policy copy \
-          --dest-creds "{{ .CONTAINER_REGISTRY_USERNAME }}:{{ .CONTAINER_REGISTRY_PASSWORD }}" \
-          --dest-tls-verify={{ .CONTAINER_REGISTRY_TLS_VERIFY | default "true" }} \
-            "docker-archive:{{ .IMAGE_ARCHIVE_PATH }}" \
-            "docker://{{ .CONTAINER_REGISTRY }}/{{ .IMAGE_NAMESPACE | lower }}/{{ .IMAGE_NAME | lower }}:{{ .IMAGE_TAG }}"
+      - for:
+          var: "IMAGE_TAGS"
+          as: "IMAGE_TAG_ALIAS"
+        cmd: |
+          skopeo --insecure-policy copy \
+            --dest-creds "{{ .CONTAINER_REGISTRY_USERNAME }}:{{ .CONTAINER_REGISTRY_PASSWORD }}" \
+            --dest-tls-verify="{{ .CONTAINER_REGISTRY_TLS_VERIFY }}" \
+              "docker-archive:{{ .IMAGE_ARCHIVE_PATH }}" \
+              "docker://{{ .CONTAINER_REGISTRY }}/{{ .IMAGE_NAMESPACE }}/{{ .IMAGE_NAME }}:{{ .IMAGE_TAG_ALIAS }}"
     requires:
       vars:
-        - "CONTAINER_REGISTRY"
-        - "CONTAINER_REGISTRY_USERNAME"
-        - "CONTAINER_REGISTRY_PASSWORD"
+        - name: "CONTAINER_REGISTRY"
+        - name: "CONTAINER_REGISTRY_USERNAME"
+        - name: "CONTAINER_REGISTRY_PASSWORD"
+        - name: "CONTAINER_REGISTRY_TLS_VERIFY"
 
-        - "IMAGE_NAMESPACE"
-        - "IMAGE_NAME"
-        - "IMAGE_TAG"
-        - "IMAGE_ARCHIVE_PATH"
+        - name: "IMAGE_ARCHIVE_PATH"
+        - name: "IMAGE_NAMESPACE"
+        - name: "IMAGE_NAME"
+        - name: "IMAGE_TAG"
+    vars:
+      IMAGE_TAG__MAJOR:
+        sh:
+          'semver get major "{{ .IMAGE_TAG }}"'
 
-  format:
-    desc: "Format project"
-    cmds:
-      - task: "format:go"
-      - task: "format:nix"
+      IMAGE_TAG__MINOR:
+        sh:
+          'semver get minor "{{ .IMAGE_TAG }}"'
 
-  format:go:
-    desc: "Format project with Go Format"
-    sources:
-      - "**/*.go"
-    cmds:
-      - "go fmt ./..."
+      IMAGE_TAG__PATCH:
+        sh:
+          'semver get patch "{{ .IMAGE_TAG }}"'
 
-  format:nix:
-    desc: "Format project with Nix"
-    sources:
-      - "**/*.nix"
-    cmds:
-      - "nix fmt"
+      IMAGE_TAG__LATEST: "latest"
+      IMAGE_TAG__MAJOR_MINOR: "{{ .IMAGE_TAG__MAJOR }}.{{ .IMAGE_TAG__MINOR }}"
+      IMAGE_TAG__MAJOR_MINOR_PATCH: "{{ .IMAGE_TAG__MAJOR_MINOR }}.{{ .IMAGE_TAG__PATCH }}"
 
-  lint:
-    desc: "Lint project"
-    cmds:
-      - task: "lint:golangci"
-      - task: "lint:go"
-
-  lint:go:
-    desc: "Lint project with Go Vet"
-    cmds:
-      - "go vet ./..."
-
-  lint:golangci:
-    desc: "Lint project with golangci-lint"
-    cmds:
-      - "golangci-lint run ./..."
+      IMAGE_TAGS:
+        ref: >-
+          list
+          .IMAGE_TAG__LATEST
+          .IMAGE_TAG__MAJOR
+          .IMAGE_TAG__MAJOR_MINOR
+          .IMAGE_TAG__MAJOR_MINOR_PATCH
 
   clean:
     desc: "Clean project"
@@ -337,12 +499,64 @@ tasks:
       - task: "clean:task"
 
   clean:go:
-    desc: "Clean Go artifacts"
+    desc: "Clean the files that Go generates"
     cmds:
       - "go clean"
-      - "rm -rf coverage.out"
+      - "rm -rf *.out"
 
   clean:task:
-    desc: "Clean project '.task/' directory"
+    desc: "Clean the files that Task generates"
     cmds:
-      - "rm -rf .task/"
+      - "rm -rf .task"
+
+  clean:skopeo:
+    internal: true
+    cmds:
+      - for:
+          var: "IMAGE_TAGS"
+          as: "IMAGE_TAG"
+        cmd: |
+          skopeo delete \
+            --creds "{{ .CONTAINER_REGISTRY_USERNAME }}:{{ .CONTAINER_REGISTRY_PASSWORD }}" \
+            --tls-verify="{{ .CONTAINER_REGISTRY_TLS_VERIFY }}" \
+              "docker://{{ .CONTAINER_REGISTRY }}/{{ .IMAGE_NAMESPACE }}/{{ .IMAGE_NAME }}:{{ .IMAGE_TAG }}" \
+              || true
+    requires:
+      vars:
+        - name: "CONTAINER_REGISTRY"
+        - name: "CONTAINER_REGISTRY_USERNAME"
+        - name: "CONTAINER_REGISTRY_PASSWORD"
+        - name: "CONTAINER_REGISTRY_TLS_VERIFY"
+
+        - name: "IMAGE_NAMESPACE"
+        - name: "IMAGE_NAME"
+    vars:
+      # The "skopeo list-tags" command gives an error if the repository is
+      # not in the registry. This is the normal condition before the first
+      # image goes into the registry. An error in an "sh" variable stops the
+      # task. The "|| true" part makes the exit code 0. The empty output then
+      # becomes an empty list of tags.
+      IMAGE_TAGS_JSON:
+        sh: |
+          skopeo list-tags \
+            --creds "{{ .CONTAINER_REGISTRY_USERNAME }}:{{ .CONTAINER_REGISTRY_PASSWORD }}" \
+            --tls-verify="{{ .CONTAINER_REGISTRY_TLS_VERIFY }}" \
+              "docker://{{ .CONTAINER_REGISTRY }}/{{ .IMAGE_NAMESPACE }}/{{ .IMAGE_NAME }}" \
+              || true
+
+      # The "IMAGE_TAGS" variable gives the list of tags in the registry.
+      # Read the template from the inside to the outside:
+      #
+      #   1. ".IMAGE_TAGS_JSON" has the text from the "skopeo list-tags"
+      #      command. The text is empty if that command gives an error.
+      #   2. "fromJson" changes the text into data. It gives a nil value if
+      #      the text is not correct JSON data.
+      #   3. "default (dict)" gives an empty "dict" if the value is empty.
+      #   4. "dig" reads the "Tags" key from the "dict". If the key is not
+      #      there, "dig" gives the empty list from the second argument.
+      IMAGE_TAGS:
+        ref: >-
+          dig "Tags" (list)
+            (.IMAGE_TAGS_JSON
+              | fromJson
+              | default (dict))

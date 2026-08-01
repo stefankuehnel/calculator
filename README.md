@@ -1,6 +1,7 @@
 # calculator
 
 [![CI](../../actions/workflows/ci.yaml/badge.svg)](../../actions/workflows/ci.yaml)
+[![CD](../../actions/workflows/cd.yaml/badge.svg)](../../actions/workflows/cd.yaml)
 
 A Command-Line Interface (CLI) Calculator Written in Go.
 
@@ -47,20 +48,14 @@ This project uses [Task](https://taskfile.dev) as a task runner.
 ### Available Tasks
 
 ```bash
-# Run default tasks (lint, build and test)
+# Run default task
 task
 
 # Initialize project
 task init
 
-# Run project
-task run -- <args>
-
-# Build project
-task build
-
-# Deploy project
-task deploy
+# Generate code
+task codegen
 
 # Format project
 task format
@@ -74,8 +69,29 @@ task test
 # Test project with coverage
 task test:coverage
 
+# Build project
+task build
+
+# Load project
+task load
+
+# Run project
+task run -- <args>
+
+# Run project locally with Workflow
+task run:workflow:local
+
+# Validate project
+task validate
+
+# Deploy project
+task deploy
+
 # Clean project
 task clean
+
+# List all available tasks
+task --list-all --sort=none
 ```
 
 ## License
