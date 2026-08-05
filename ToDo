@@ -1,0 +1,2 @@
+- Add "git" -> "git:hook" -> "git:hook:pre-commit" task to "Taskfile.yaml".
+- Add "semver" -> "semver:increment" task to "Taskfile.yaml". Use "major", "minor" or "patch" as "enum" in the task.
